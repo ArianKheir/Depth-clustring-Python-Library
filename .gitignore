@@ -1,0 +1,23 @@
+# Python virtual environment
+'depth_clustering pylib'/.venv/
+
+# Python bytecode cache
+# Python virtual environment
+# Matches .venv, venv, etc., anywhere in the project
+.venv/
+venv/
+env/
+
+# Python bytecode cache
+# Matches __pycache__ anywhere in the project
+__pycache__/
+
+# C/C++ extension build artifacts
+# Matches the build directory inside 'depth_clustering pylib' or anywhere else
+build/
+*.so
+
+# Distribution / packaging artifacts
+# Matches the .egg-info directory
+*.egg-info/
+'depth_clustering pylib'/__pycache__
