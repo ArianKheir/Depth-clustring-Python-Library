@@ -16,7 +16,8 @@ __pycache__/
 # Matches the build directory inside 'depth_clustering pylib' or anywhere else
 build/
 *.so
-
+.idea/
+external/
 # Distribution / packaging artifacts
 # Matches the .egg-info directory
 *.egg-info/
