@@ -154,7 +154,7 @@ The script also supports debugging by outputting intermediate images (e.g., dept
 ## **Example Output**
 An example of the output from the clustering pipeline is shown below. The label image shows different clusters with unique colors.
 
-![Clustered Point Cloud]('Tests & Python implementation'/cluster_labels_colored2.png)
+![Clustered Point Cloud](./Tests%20%26%20Python%20implementation/cluster_labels_colored2.png)
 
 In the output image:
 - Each color represents a different cluster.
