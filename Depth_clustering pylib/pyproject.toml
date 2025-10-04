@@ -1,0 +1,59 @@
+[build-system]
+requires = ["setuptools>=42", "wheel", "pybind11>=2.6.0", "cmake>=3.12"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "depth_clustering"
+version = "1.0.0"
+description = "Python wrapper for depth clustering library using pybind11"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {text = "MIT"}
+authors = [
+    {name = "Depth Clustering Team"},
+]
+keywords = ["point-cloud", "clustering", "lidar", "computer-vision"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy",
+    "pybind11>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "black",
+    "flake8",
+    "mypy",
+]
+
+[tool.setuptools]
+packages = ["depth_clustering"]
+
+[tool.setuptools.package-data]
+depth_clustering = ["*.pyi", "py.typed"]
+
+[tool.black]
+line-length = 88
+target-version = ['py36']
+
+[tool.mypy]
+python_version = "3.6"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
