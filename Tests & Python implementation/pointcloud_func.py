@@ -3,6 +3,7 @@ import re
 import depth_clustering as dc
 import cv2
 from PIL import Image
+import time
 
 def load_calibration_data(cfg_path):
     """
@@ -187,21 +188,28 @@ def numpy_to_cloud(
     # The pitch angle is the arctangent of the vertical component (z) and horizontal distance.
     point_pitch = np.arctan2(z, xy_dist)
     
-    # --- Assign each point to its nearest ring ---
+    # 1. Reshape point_pitch to (n, 1) so it can broadcast against pitch_angles_rad (m,).
+    #    This creates a (n, m) matrix of differences in one step.
+    #    E.g., point_pitch[:, np.newaxis] has shape (num_points, 1)
+    #          pitch_angles_rad has shape (num_rings,)
+    #    The result of subtraction has shape (num_points, num_rings)
+    diffs = np.abs(point_pitch[:, np.newaxis] - pitch_angles_rad)
+    
+    # 2. Find the index of the minimum difference for each point (row).
+    #    `axis=1` tells argmin to operate along each row.
+    ring_indices = np.argmin(diffs, axis=1)
+
+
+    # --- Populate the C++ Cloud object ---
+    # This loop is now much faster because the expensive calculation is done.
+    # We are just creating objects and adding them to the list.
     for i in range(len(points_nx3)):
-        # For the current point's pitch, find the index of the closest pitch angle
-        # in the calibration array. This index becomes the ring index.
-        ring_idx = np.argmin(np.abs(pitch_angles_rad - point_pitch[i]))
-        
-        # Create a `RichPoint`, the C++ data structure for a single point.
-        # It stores x, y, z coordinates and the calculated ring index.
         point = dc.utils.RichPoint(
             float(points_nx3[i, 0]),
             float(points_nx3[i, 1]),
             float(points_nx3[i, 2]),
-            int(ring_idx)
+            int(ring_indices[i])  # Use the pre-calculated index
         )
-        # Add the newly created RichPoint to the Cloud object
         cloud.push_back(point)
     
     return cloud
@@ -262,16 +270,24 @@ def pointcloud_to_cluster_image(
     #    ground_remover -> clusterer -> cluster_collector
     ground_remover.AddClient(clusterer)
     clusterer.AddClient(cluster_collector)
-    
+
+    # --- TIMER START np to pc ---
+    # 2. Record the time just before calling the function
+    #print("\nStarting clustering pipeline...")
+    start_time = time.perf_counter()    
     # 8. Convert the input NumPy point cloud into the C++ library's `Cloud` format.
     cloud = numpy_to_cloud(
-        points_nx3, 
-        pitch_angles_rad, 
-        yaw_start_deg, 
-        yaw_end_deg, 
-        img_width,
-        offset_xyz
+        points_nx3=points_nx3,
+        pitch_angles_rad=pitch_angles_rad,
+        offset_xyz=offset_xyz
     )
+    # --- TIMER END np to pc ---
+    # 3. Record the time just after the function finishes
+    end_time = time.perf_counter()
+    # 4. Calculate the duration and print it
+    duration = end_time - start_time
+    #print(f"np to pc Clustering pipeline finished in {duration:.4f} seconds.")
+    # -------------------
     
     # Check if the conversion was successful.
     if cloud is None or cloud.empty():
@@ -319,7 +335,8 @@ def example_usage():
 
     print(f"Extracted {len(points_nx3)} points")
     print(f"Point cloud shape: {points_nx3.shape}") 
-    
+    print("\nStarting clustering pipeline...")
+    start_time = time.perf_counter()
     # Run the main clustering pipeline.
     label_image, depth_image, clusters = pointcloud_to_cluster_image(
         points_nx3=points_nx3,
@@ -327,7 +344,13 @@ def example_usage():
         cfg_path=cfg_path,
         angle_tol_deg=8.0 # A smaller angle makes clustering stricter.
     )
-    
+    # --- TIMER END ---
+    # 3. Record the time just after the function finishes
+    end_time = time.perf_counter()
+    # 4. Calculate the duration and print it
+    duration = end_time - start_time
+    print(f"Clustering pipeline finished in {duration:.4f} seconds.")
+    # -------------------
     # --- Visualize and Save Results ---
     print(f"Label image shape: {label_image.shape}")
     print(f"Number of clusters: {len(clusters)}")

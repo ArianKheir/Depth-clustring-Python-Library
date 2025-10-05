@@ -73,13 +73,19 @@
 #endif
 
 
+// for faster np to point cloude 
+#include <cmath>
+#include <vector>
+#include <limits>
+#include <memory> 
+
 namespace py = pybind11;
 using namespace depth_clustering;
 using Cloud = depth_clustering::Cloud;
 using ClusterMap = std::unordered_map<uint16_t, Cloud>;
 using DepthMap = std::unordered_map<uint16_t, cv::Mat>; 
 namespace pybind11 { namespace detail {
-    
+
 // Type caster for cv::Mat
 template <> struct type_caster<cv::Mat> {
 public:
@@ -260,6 +266,75 @@ PYBIND11_MODULE(_depth_clustering, m) {
     bind_ground_removal(m);
     bind_visualization(m);
 
+}
+
+std::unique_ptr<Cloud> numpy_to_cloud_cpp(
+    py::array_t<double, py::array::c_style | py::array::forcecast> points_nx3,
+    py::array_t<double, py::array::c_style | py::array::forcecast> pitch_angles_rad,
+    const std::tuple<double, double, double>& offset_xyz) {
+
+    // 1. --- Input Validation ---
+    if (points_nx3.ndim() != 2 || points_nx3.shape(1) != 3) {
+        throw std::runtime_error("Input points must be an n×3 NumPy array.");
+    }
+    if (pitch_angles_rad.ndim() != 1) {
+        throw std::runtime_error("Pitch angles must be a 1D NumPy array.");
+    }
+
+    const auto num_points = points_nx3.shape(0);
+    const auto num_rings = pitch_angles_rad.shape(0);
+    if (num_rings == 0) {
+        throw std::runtime_error("Pitch angles array cannot be empty.");
+    }
+
+    // 2. --- Get efficient, unchecked accessors for raw data ---
+    auto points_ptr = points_nx3.unchecked<2>();
+    auto angles_ptr = pitch_angles_rad.unchecked<1>();
+
+    // Unpack offset
+    const double offset_x = std::get<0>(offset_xyz);
+    const double offset_y = std::get<1>(offset_xyz);
+    const double offset_z = std::get<2>(offset_xyz);
+
+    // 3. --- Create the Cloud object on the heap via a unique_ptr ---
+    // The Cloud class is non-copyable, so we must return a pointer.
+    // std::unique_ptr is the modern, safe way to transfer ownership to Python.
+    auto cloud = std::make_unique<Cloud>();
+
+    // Call reserve() on the Cloud object itself, not on the result of points().
+    cloud->reserve(num_points); // Pre-allocate memory for efficiency
+
+    // 4. --- Main processing loop (all in native C++) ---
+    for (ssize_t i = 0; i < num_points; ++i) {
+        const double rel_x = points_ptr(i, 0) - offset_x;
+        const double rel_y = points_ptr(i, 1) - offset_y;
+        const double rel_z = points_ptr(i, 2) - offset_z;
+
+        const double xy_dist = std::sqrt(rel_x * rel_x + rel_y * rel_y);
+        const double point_pitch = std::atan2(rel_z, xy_dist);
+
+        // --- Find the closest ring index (argmin) ---
+        int best_ring_idx = 0;
+        double min_diff = std::numeric_limits<double>::max();
+
+        for (ssize_t j = 0; j < num_rings; ++j) {
+            const double diff = std::abs(point_pitch - angles_ptr(j));
+            if (diff < min_diff) {
+                min_diff = diff;
+                best_ring_idx = j;
+            }
+        }
+
+        // Use -> to call methods on the pointer
+        cloud->push_back(RichPoint(
+            static_cast<float>(points_ptr(i, 0)),
+            static_cast<float>(points_ptr(i, 1)),
+            static_cast<float>(points_ptr(i, 2)),
+            static_cast<uint16_t>(best_ring_idx)
+        ));
+    }
+
+    return cloud; // Return the unique_ptr
 }
 
 /**
@@ -499,6 +574,13 @@ void bind_utils(py::module &m) {
         .def(py::init<>())
         .def("start", &time_utils::Timer::start)
         .def("measure", &time_utils::Timer::measure, py::arg("units") = time_utils::Timer::Units::Micro);
+
+    utils.def("numpy_to_cloud", &numpy_to_cloud_cpp,
+    "A fast, C++ implementation to convert a NumPy point cloud to a dc::utils::Cloud object.",
+    py::arg("points_nx3"),
+    py::arg("pitch_angles_rad"),
+    py::arg("offset_xyz")
+    );
 
     // Create a nested submodule for memory-related utilities.
     py::module mem_utils = utils.def_submodule("mem_utils", "Memory utilities");
