@@ -153,66 +153,6 @@ class LabelImageCapture(dc.communication.PyAbstractClient_Mat):
         """Returns the stored label image to the Python caller."""
         return self.label_image if self.label_image is not None else np.array([])
 
-def numpy_to_cloud(
-    points_nx3: np.ndarray,
-    pitch_angles_rad: np.ndarray,
-    yaw_start_deg: float = 180.0,
-    yaw_end_deg: float = -180.0,
-    img_width: int = 870,
-    offset_xyz: tuple = (0.79, 0.0, 1.73)
-) -> dc.utils.Cloud:
-    """
-    Converts a standard NumPy (n, 3) point cloud array to a `depth_clustering.utils.Cloud` object.
-    
-    The C++ library requires each point to have a "ring index" associated with it. This function
-    calculates the pitch angle for each input point and finds the closest matching ring
-    from the calibration data to assign this index.
-    """
-    # Input validation.
-    if points_nx3.shape[1] != 3:
-        raise ValueError(f"Expected shape (n, 3), got {points_nx3.shape}")
-
-    # Instantiate the C++ Cloud object that we will populate.
-    cloud = dc.utils.Cloud()
-    
-    # --- Reverse the offset to get sensor-centric coordinates ---
-    offset_x, offset_y, offset_z = offset_xyz
-    # Subtracting the offset gives us the coordinates relative to the sensor's origin.
-    points_relative = points_nx3 - np.array([offset_x, offset_y, offset_z])
-    
-    # --- Calculate the pitch angle for every point ---
-    x, y, z = points_relative[:, 0], points_relative[:, 1], points_relative[:, 2]
-    
-    # The horizontal distance from the sensor's vertical axis.
-    xy_dist = np.sqrt(x**2 + y**2)
-    # The pitch angle is the arctangent of the vertical component (z) and horizontal distance.
-    point_pitch = np.arctan2(z, xy_dist)
-    
-    # 1. Reshape point_pitch to (n, 1) so it can broadcast against pitch_angles_rad (m,).
-    #    This creates a (n, m) matrix of differences in one step.
-    #    E.g., point_pitch[:, np.newaxis] has shape (num_points, 1)
-    #          pitch_angles_rad has shape (num_rings,)
-    #    The result of subtraction has shape (num_points, num_rings)
-    diffs = np.abs(point_pitch[:, np.newaxis] - pitch_angles_rad)
-    
-    # 2. Find the index of the minimum difference for each point (row).
-    #    `axis=1` tells argmin to operate along each row.
-    ring_indices = np.argmin(diffs, axis=1)
-
-
-    # --- Populate the C++ Cloud object ---
-    # This loop is now much faster because the expensive calculation is done.
-    # We are just creating objects and adding them to the list.
-    for i in range(len(points_nx3)):
-        point = dc.utils.RichPoint(
-            float(points_nx3[i, 0]),
-            float(points_nx3[i, 1]),
-            float(points_nx3[i, 2]),
-            int(ring_indices[i])  # Use the pre-calculated index
-        )
-        cloud.push_back(point)
-    
-    return cloud
     
 def pointcloud_to_cluster_image(
     points_nx3: np.ndarray,
@@ -274,19 +214,19 @@ def pointcloud_to_cluster_image(
     # --- TIMER START np to pc ---
     # 2. Record the time just before calling the function
     #print("\nStarting clustering pipeline...")
-    start_time = time.perf_counter()    
+    # start_time = time.perf_counter()    
     # 8. Convert the input NumPy point cloud into the C++ library's `Cloud` format.
-    cloud = numpy_to_cloud(
+    cloud = dc.utils.numpy_to_cloud(
         points_nx3=points_nx3,
         pitch_angles_rad=pitch_angles_rad,
         offset_xyz=offset_xyz
     )
     # --- TIMER END np to pc ---
     # 3. Record the time just after the function finishes
-    end_time = time.perf_counter()
-    # 4. Calculate the duration and print it
-    duration = end_time - start_time
-    #print(f"np to pc Clustering pipeline finished in {duration:.4f} seconds.")
+    # end_time = time.perf_counter()
+    # # 4. Calculate the duration and print it
+    # duration = end_time - start_time
+    # print(f"np to pc Clustering pipeline finished in {duration:.4f} seconds.")
     # -------------------
     
     # Check if the conversion was successful.
@@ -299,7 +239,6 @@ def pointcloud_to_cluster_image(
     projection_ptr = cloud.projection_ptr()
     if not projection_ptr:
         raise RuntimeError("Failed to get projection pointer")
-
     # This C++ method populates the internal depth image inside the projection object.
     projection_ptr.InitFromPoints(cloud.points())
     
