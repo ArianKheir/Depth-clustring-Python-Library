@@ -80,6 +80,21 @@ pip install --no-build-isolation .
 
 ---
 
+### Alternative: Reproduce the Full Environment
+
+For exact reproducibility (recommended for research use), a complete conda environment
+snapshot is provided. This captures all Python and system-level dependencies at their
+exact tested versions:
+
+```bash
+conda env create -f environment.yml
+conda activate maskformer
+```
+
+> **Note:** The `environment.yml` was exported from a Linux x86_64 machine with CUDA 12.4.
+> It may not be fully portable across operating systems or GPU architectures, but serves
+> as a precise reference for reproducing results.
+
 ## Usage
 
 ### Point Cloud Clustering Example
