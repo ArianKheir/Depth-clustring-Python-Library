@@ -3,7 +3,7 @@ import re
 import depth_clustering as dc
 import cv2
 from PIL import Image
-import time
+import time 
 
 def load_calibration_data(cfg_path):
     """
@@ -156,13 +156,18 @@ class LabelImageCapture(dc.communication.PyAbstractClient_Mat):
     
 def pointcloud_to_cluster_image(
     points_nx3: np.ndarray,
-    pitch_angles_rad: np.ndarray,
-    cfg_path: str,
-    angle_tol_deg: float = 30.0,
+    ####
+    pitch_angles_rad: np.ndarray  = None,
+    cfg_path: str = None,
+    ###
+    params = None,
+    ###
+    angle_tol_deg: float = 8.0,
     yaw_start_deg: float = 180.0,
     yaw_end_deg: float = -180.0,
     img_width: int = 870,
-    offset_xyz: tuple = (0.79, 0.0, 1.73)
+    offset_xyz: tuple = (0.0, 0.0, 0.0)
+    # not (0.79, 0.0, 1.73)
 ) -> tuple:
     """
     The main processing function. It takes a raw point cloud and orchestrates the
@@ -179,9 +184,14 @@ def pointcloud_to_cluster_image(
     """
     
     # 1. Initialize projection parameters from the 'img.cfg' file.
-    params = dc.projections.ProjectionParams.FromConfigFile(cfg_path)
+
+    # params = dc.projections.ProjectionParams.FromConfigFile(cfg_path)
+    
     if params is None:
-        raise ValueError(f"Failed to load config from {cfg_path}")
+    # fallback: old cfg path behaviour
+        params = dc.projections.ProjectionParams.FromConfigFile(cfg_path)
+        if params is None:
+            raise ValueError(f"Failed to load config from {cfg_path}")
     
     # 2. Create the RingProjection object. This module is responsible for converting the
     #    3D point cloud into a 2D depth image based on the provided parameters.
@@ -216,6 +226,22 @@ def pointcloud_to_cluster_image(
     #print("\nStarting clustering pipeline...")
     # start_time = time.perf_counter()    
     # 8. Convert the input NumPy point cloud into the C++ library's `Cloud` format.
+# TODO
+#####################3 
+    print(points_nx3.shape)
+
+    print("X min/max:", points_nx3[:,0].min(), points_nx3[:,0].max())
+    print("Y min/max:", points_nx3[:,1].min(), points_nx3[:,1].max())
+    print("Z min/max:", points_nx3[:,2].min(), points_nx3[:,2].max())
+
+    print(points_nx3[:20])
+    # Add this debug temporarily in pointcloud_to_cluster_image, before numpy_to_cloud call
+    # print("=== numpy_to_cloud ===")
+    # help(dc.utils.numpy_to_cloud)
+############################
+    points_nx3 = points_nx3.astype(np.float64)
+    pitch_angles_rad = np.asarray(pitch_angles_rad, dtype=np.float64)
+
     cloud = dc.utils.numpy_to_cloud(
         points_nx3=points_nx3,
         pitch_angles_rad=pitch_angles_rad,
@@ -244,7 +270,40 @@ def pointcloud_to_cluster_image(
     
     # 10. Get the resulting depth image back into Python as a NumPy array
     depth_image = np.array(projection_ptr.depth_image(), copy=True)
-    
+    #TODO
+    #########################################33
+    print(depth_image.shape)
+
+    for r in [0,100,200,300,400,500]:
+        print(
+            r,
+            np.count_nonzero(depth_image[r])
+        )
+    mask = depth_image > 0
+
+    print("nonzero pixels:", mask.sum())
+    print("total pixels:", depth_image.size)
+    print("coverage:", mask.sum() / depth_image.size)    
+    # print(depth_image.shape)
+
+    # print(np.count_nonzero(depth_image))
+
+    # print(depth_image.min())
+    # print(depth_image.max())
+
+    # depth_vis = depth_image.copy()
+
+    # depth_vis[depth_vis < 0] = 0
+
+    # depth_vis = depth_vis / depth_vis.max()
+
+    # depth_vis = (depth_vis * 255).astype(np.uint8)
+
+    # cv2.imwrite(
+    #     "projected_depth.png",
+    #     depth_vis
+    # )    
+    ###################################################33
     # 11. Run the entire pipeline by feeding the initial cloud to the first module.
     try:
         ground_remover.OnNewObjectReceived(cloud, 0)
